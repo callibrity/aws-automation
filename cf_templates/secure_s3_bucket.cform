@@ -1,0 +1,79 @@
+---
+Description: Creates a secured S3 bucket to share federation metadata with Callibrity accounts
+AWSTemplateFormatVersion: "2010-09-09"
+Parameters:
+  organizationID:
+    Description: The ID for the AWS Organization 
+    Type: String
+Resources:
+  BucketEncryptionKMSKey:
+    Type: AWS::KMS::Key
+    Properties:
+      EnableKeyRotation: true
+      PendingWindowInDays: 14
+      KeyPolicy:
+        Version: 2012-10-17
+        Statement:
+          - Sid: Enable IAM User Permissions
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:aws:iam::${AWS::AccountId}:root'
+            Action: 'kms:*'
+            Resource: '*'
+          - Sid: Allow administration of the key
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:aws:iam::${AWS::AccountId}:root'
+            Action:
+              - 'kms:Create*'
+              - 'kms:Describe*'
+              - 'kms:Enable*'
+              - 'kms:List*'
+              - 'kms:Put*'
+              - 'kms:Update*'
+              - 'kms:Revoke*'
+              - 'kms:Disable*'
+              - 'kms:Get*'
+              - 'kms:Delete*'
+              - 'kms:ScheduleKeyDeletion'
+              - 'kms:CancelKeyDeletion'
+            Resource: '*'
+          - Sid: Allow use of the key
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:aws:iam::${AWS::AccountId}:root'
+            Action:
+              - 'kms:DescribeKey'
+              - 'kms:Encrypt'
+              - 'kms:Decrypt'
+              - 'kms:ReEncrypt*'
+              - 'kms:GenerateDataKey'
+              - 'kms:GenerateDataKeyWithoutPlaintext'
+            Resource: '*'        
+  SecureS3Bucket:
+      Type: AWS::S3::Bucket
+      Properties: 
+        AccessControl: Private
+        BucketEncryption:
+          ServerSideEncryptionConfiguration:
+            - ServerSideEncryptionByDefault:
+                SSEAlgorithm: 'aws:kms'
+                KMSMasterKeyID: !Ref BucketEncryptionKMSKey
+              BucketKeyEnabled: true
+  SecureS3BucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref SecureS3Bucket
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Action: 
+              - 's3:GetObject'
+            Effect: Allow            
+            Resource:  !Sub 'arn:aws:s3:::${SecureS3Bucket}/*'
+            Principal: 
+              AWS:
+                - '*'
+            Condition:
+              StringEquals:
+                "aws:PrincipalOrgID": !Ref organizationID
